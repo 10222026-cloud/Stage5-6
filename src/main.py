@@ -101,3 +101,14 @@ y_pred_focal = model_focal.predict(X_test)
 y_prob_focal = model_focal.predict_proba(X_test)[:, 1]
 
 evaluate_model("FOCAL (SIMULATED)", y_test, y_pred_focal, y_prob_focal)
+from solution5_cost_sensitive import evaluate_cost_sensitive_model
+
+# Assuming 'y_test' are your true labels and 'y_prob_baseline' are the probabilities from your AI
+print("\nRunning Solution 5: Economic Cost-Sensitive Learning...")
+best_thresh, savings, predictions = evaluate_cost_sensitive_model(
+    y_true=y_test, 
+    y_prob=y_prob_baseline, 
+    tp_benefit=5000,   # Adjust these numbers based on your specific report data
+    fp_cost=500, 
+    fn_cost=50000
+)
