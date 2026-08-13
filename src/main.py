@@ -1,103 +1,296 @@
+# ==========================================================
+# IMPORT LIBRARIES
+# ==========================================================
+
+# Đọc và xử lý dữ liệu dạng bảng (CSV -> DataFrame)
 import pandas as pd
+
+# Thư viện tính toán số học (project này ít dùng trực tiếp)
 import numpy as np
 
+# Chia dữ liệu thành tập Train và Test
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    classification_report,
-    confusion_matrix,
-    roc_auc_score
-)
-from sklearn.preprocessing import StandardScaler
-from imblearn.over_sampling import SMOTE
-from imblearn.under_sampling import NearMiss
 
-# -----------------------------
-# Load data
-# -----------------------------
+# Mô hình Logistic Regression dùng để phân loại
+from sklearn.linear_model import LogisticRegression
+
+# Các hàm đánh giá mô hình
+from sklearn.metrics import (
+    classification_report,   # Precision, Recall, F1-score
+    confusion_matrix,        # TP, TN, FP, FN
+    roc_auc_score            # Tính ROC-AUC
+)
+
+# Chuẩn hóa dữ liệu trước khi train
+from sklearn.preprocessing import StandardScaler
+
+# Thuật toán SMOTE - tăng số lượng mẫu của lớp thiểu số
+from imblearn.over_sampling import SMOTE
+
+# Thuật toán NearMiss - giảm số lượng mẫu của lớp đa số
+from imblearn.under_sampling import NearMiss
+# ==========================================================
+# LOAD DATASET
+# ==========================================================
+
+# Đọc dữ liệu từ file CSV
 data = pd.read_csv("data/sample.csv")
+
+# Chọn 2 đặc trưng (features) để train model
+# time       : thời gian đo
+# vibration  : giá trị rung
 X = data[["time", "vibration"]]
+
+# Nhãn cần dự đoán
+# 0 = Normal
+# 1 = Fault
 y = data["label"]
 
-# -----------------------------
-# Train-test split
-# -----------------------------
+
+# ==========================================================
+# TRAIN - TEST SPLIT
+# ==========================================================
+
+# Chia dữ liệu:
+# 70% để train
+# 30% để test
+#
+# random_state=42:
+# Giữ kết quả chia luôn giống nhau mỗi lần chạy.
+#
+# stratify=y:
+# Giữ tỷ lệ Normal/Fault giống với dataset gốc.
+
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=42, stratify=y
+    X,
+    y,
+    test_size=0.3,
+    random_state=42,
+    stratify=y
 )
 
-# -----------------------------
-# Scaling
-# -----------------------------
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_test = scaler.transform(X_test)
 
+# ==========================================================
+# DATA SCALING
+# ==========================================================
+
+# Tạo bộ chuẩn hóa dữ liệu
+scaler = StandardScaler()
+
+# Tính Mean và Standard Deviation từ Train Set
+# Sau đó chuẩn hóa Train Set
+X_train = scaler.fit_transform(X_train)
+
+# Dùng chính Mean và Standard Deviation của Train Set
+# để chuẩn hóa Test Set.
+#
+# Không dùng fit_transform() ở đây để tránh Data Leakage.
+X_test = scaler.transform(X_test)
+# ==========================================================
+# EVALUATION FUNCTION
+# ==========================================================
+
+# Hàm dùng để đánh giá kết quả của mỗi mô hình
+# Giúp tránh viết lại cùng một đoạn code 6 lần
 def evaluate_model(name, y_true, y_pred, y_prob):
+
+    # In tiêu đề của phương pháp đang đánh giá
     print("\n" + "=" * 60)
     print(name)
     print("=" * 60)
+
+    # In Confusion Matrix
+    # Cho biết số lượng TP, TN, FP và FN
     print("\nConfusion Matrix")
     print(confusion_matrix(y_true, y_pred))
+
+    # In Accuracy, Precision, Recall và F1-score
     print("\nClassification Report")
-    print(classification_report(y_true, y_pred, zero_division=0))
+    print(classification_report(
+        y_true,
+        y_pred,
+        zero_division=0      # Nếu không tính được Precision/Recall thì trả về 0 thay vì báo lỗi
+    ))
+
+    # Tính ROC-AUC
+    # Đánh giá khả năng phân biệt Normal và Fault
     print("ROC-AUC:", round(roc_auc_score(y_true, y_prob), 4))
+    # ==========================================================
+# 1. BASELINE MODEL
+# ==========================================================
 
-
-# 1 Baseline
+# Tạo mô hình Logistic Regression với các tham số mặc định
 model_base = LogisticRegression()
-model_base.fit(X_train,y_train)
+
+# Huấn luyện mô hình bằng dữ liệu Train
+model_base.fit(X_train, y_train)
+
+# Dự đoán nhãn của dữ liệu Test
+# Kết quả chỉ có 0 (Normal) hoặc 1 (Fault)
 y_pred_base = model_base.predict(X_test)
+
+# Dự đoán xác suất thuộc lớp Fault
+# [:,1] lấy xác suất của lớp 1 (Fault)
 y_prob_base = model_base.predict_proba(X_test)[:,1]
-evaluate_model("1. BASELINE",y_test,y_pred_base,y_prob_base)
 
-# 2 Class Weight
-model_weight=LogisticRegression(class_weight="balanced")
-model_weight.fit(X_train,y_train)
-y_pred_weight=model_weight.predict(X_test)
-y_prob_weight=model_weight.predict_proba(X_test)[:,1]
-evaluate_model("2. CLASS WEIGHTING",y_test,y_pred_weight,y_prob_weight)
+# Đánh giá kết quả của Baseline
+evaluate_model(
+    "1. BASELINE",
+    y_test,
+    y_pred_base,
+    y_prob_base
+)
+# ==========================================================
+# 2. CLASS WEIGHTING
+# ==========================================================
 
-# 3 SMOTE
-sm=SMOTE(random_state=42)
-X_train_sm,y_train_sm=sm.fit_resample(X_train,y_train)
-model_sm=LogisticRegression()
-model_sm.fit(X_train_sm,y_train_sm)
-y_pred_sm=model_sm.predict(X_test)
-y_prob_sm=model_sm.predict_proba(X_test)[:,1]
-evaluate_model("3. SMOTE",y_test,y_pred_sm,y_prob_sm)
+# Tạo Logistic Regression và tăng trọng số cho lớp thiểu số (Fault)
+model_weight = LogisticRegression(class_weight="balanced")
 
-# 4 Threshold
-thr=0.30
-y_pred_thr=(y_prob_base>=thr).astype(int)
-evaluate_model("4. THRESHOLD TUNING",y_test,y_pred_thr,y_prob_base)
+# Huấn luyện mô hình
+model_weight.fit(X_train, y_train)
 
-# 5 Focal simulated
-model_focal=LogisticRegression(class_weight={0:1,1:3})
-model_focal.fit(X_train,y_train)
-y_pred_f=model_focal.predict(X_test)
-y_prob_f=model_focal.predict_proba(X_test)[:,1]
-evaluate_model("5. FOCAL LOSS (SIMULATED)",y_test,y_pred_f,y_prob_f)
+# Dự đoán nhãn của Test Set
+y_pred_weight = model_weight.predict(X_test)
 
+# Dự đoán xác suất của lớp Fault
+y_prob_weight = model_weight.predict_proba(X_test)[:,1]
 
-# 6 NearMiss
-nm=NearMiss(version=1)
-X_train_nm,y_train_nm=nm.fit_resample(X_train,y_train)
-model_nm=LogisticRegression()
-model_nm.fit(X_train_nm,y_train_nm)
-y_pred_nm=model_nm.predict(X_test)
-y_prob_nm=model_nm.predict_proba(X_test)[:,1]
-evaluate_model("6. NEARMISS UNDER-SAMPLING",y_test,y_pred_nm,y_prob_nm)
+# Đánh giá kết quả
+evaluate_model(
+    "2. CLASS WEIGHTING",
+    y_test,
+    y_pred_weight,
+    y_prob_weight
+)
+# ==========================================================
+# 3. SMOTE
+# ==========================================================
+
+# Tạo đối tượng SMOTE
+# random_state=42 giúp kết quả luôn giống nhau khi chạy lại
+sm = SMOTE(random_state=42)
+
+# Tạo thêm các mẫu Fault trên Train Set
+X_train_sm, y_train_sm = sm.fit_resample(X_train, y_train)
+
+# Tạo Logistic Regression
+model_sm = LogisticRegression()
+
+# Huấn luyện trên dữ liệu sau khi đã SMOTE
+model_sm.fit(X_train_sm, y_train_sm)
+
+# Dự đoán nhãn của Test Set
+y_pred_sm = model_sm.predict(X_test)
+
+# Dự đoán xác suất của lớp Fault
+y_prob_sm = model_sm.predict_proba(X_test)[:,1]
+
+# Đánh giá kết quả
+evaluate_model(
+    "3. SMOTE",
+    y_test,
+    y_pred_sm,
+    y_prob_sm
+)
+# ==========================================================
+# 4. THRESHOLD TUNING
+# ==========================================================
+
+# Chọn ngưỡng phân loại mới
+# Mặc định Logistic Regression dùng threshold = 0.5
+# Ở đây giảm xuống còn 0.3
+thr = 0.30
+
+# Nếu xác suất >= 0.30 → Fault (1)
+# Nếu xác suất < 0.30 → Normal (0)
+y_pred_thr = (y_prob_base >= thr).astype(int)
+
+# Đánh giá kết quả
+# Vẫn sử dụng xác suất của Baseline để tính ROC-AUC
+evaluate_model(
+    "4. THRESHOLD TUNING",
+    y_test,
+    y_pred_thr,
+    y_prob_base
+)
+# ==========================================================
+# 5. FOCAL LOSS (SIMULATED)
+# ==========================================================
+
+# Tạo Logistic Regression
+# Tăng trọng số của lớp Fault lên gấp 3 lần
+model_focal = LogisticRegression(class_weight={0:1, 1:3})
+
+# Huấn luyện mô hình
+model_focal.fit(X_train, y_train)
+
+# Dự đoán nhãn của Test Set
+y_pred_f = model_focal.predict(X_test)
+
+# Dự đoán xác suất của lớp Fault
+y_prob_f = model_focal.predict_proba(X_test)[:,1]
+
+# Đánh giá kết quả
+evaluate_model(
+    "5. FOCAL LOSS (SIMULATED)",
+    y_test,
+    y_pred_f,
+    y_prob_f
+)
+# ==========================================================
+# 6. NEARMISS UNDER-SAMPLING
+# ==========================================================
+
+# Tạo đối tượng NearMiss
+# version=1 là phiên bản được sử dụng trong project
+nm = NearMiss(version=1)
+
+# Giảm số lượng mẫu của lớp Normal trên Train Set
+X_train_nm, y_train_nm = nm.fit_resample(X_train, y_train)
+
+# Tạo Logistic Regression
+model_nm = LogisticRegression()
+
+# Huấn luyện mô hình trên dữ liệu đã cân bằng
+model_nm.fit(X_train_nm, y_train_nm)
+
+# Dự đoán nhãn của Test Set
+y_pred_nm = model_nm.predict(X_test)
+
+# Dự đoán xác suất của lớp Fault
+y_prob_nm = model_nm.predict_proba(X_test)[:,1]
+
+# Đánh giá kết quả
+evaluate_model(
+    "6. NEARMISS UNDER-SAMPLING",
+    y_test,
+    y_pred_nm,
+    y_prob_nm
+)
+# ==========================================================
+# END OF EXPERIMENT
+# ==========================================================
+
+# In thông báo tất cả thí nghiệm đã hoàn thành
 print("="*60)
 print("ALL EXPERIMENTS COMPLETED")
 print("="*60)
 
 
+# ==========================================================
+# PROJECT SUMMARY
+# ==========================================================
+
 print("\n"+"="*70)
 print("PROJECT COMPLETED")
 print("="*70)
+
+# Mục tiêu nghiên cứu
 print("\nResearch Objective")
 print("Compare six class imbalance handling techniques for vibration-based rare event detection.")
+
+# Các phương pháp đã thực hiện
 print("\nMethods Evaluated")
 print("✓ Baseline Logistic Regression")
 print("✓ Class Weighting")
@@ -105,22 +298,34 @@ print("✓ SMOTE Oversampling")
 print("✓ Threshold Tuning")
 print("✓ Focal Loss (Simulated)")
 print("✓ NearMiss Under-Sampling")
+
+# Mô hình được nhóm lựa chọn
 print("\nSelected Model for Deployment")
 print("NearMiss Under-Sampling")
+
+# Lý do lựa chọn
 print("\nReason for Selection")
 print("- Stable classification performance")
 print("- High Precision")
 print("- Competitive ROC-AUC")
 print("- Suitable for imbalanced vibration datasets")
 print("- Easy industrial deployment")
+
+# Ứng dụng
 print("\nIndustrial Application")
 print("Bearing Fault Detection")
 print("Predictive Maintenance")
 print("Real-Time Vibration Monitoring")
+
+# Bước tiếp theo
 print("\nNext Step")
 print("Deploy the selected model into the predictive maintenance system for online machine monitoring.")
+
+# Trạng thái
 print("\nDeployment Status")
 print("READY FOR FACTORY DEPLOYMENT")
+
+# Kết luận
 print("\n"+"="*70)
 print("FINAL CONCLUSION")
 print("="*70)
