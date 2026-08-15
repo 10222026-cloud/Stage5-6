@@ -332,3 +332,48 @@ print("="*70)
 print("Six imbalance handling techniques have been evaluated.")
 print("NearMiss Under-Sampling is recommended for deployment based on the experimental results.")
 print("="*70)
+
+# ==========================================================
+# EXPORT RESULTS & RUN MATLAB
+# ==========================================================
+import csv
+import subprocess
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+method_names = [
+    "Baseline", 
+    "Class Weighting", 
+    "SMOTE", 
+    "Threshold Tuning", 
+    "Simulated Focal Loss", 
+    "NearMiss"
+]
+
+predictions = [y_pred_base, y_pred_weight, y_pred_sm, y_pred_thr, y_pred_f, y_pred_nm]
+probabilities = [y_prob_base, y_prob_weight, y_prob_sm, y_prob_base, y_prob_f, y_prob_nm]
+
+# 1. Save data to CSV
+print("\nExporting metrics to CSV...")
+with open("metrics_output.csv", "w", newline="") as file:
+    writer = csv.writer(file)
+    writer.writerow(["Method", "Accuracy", "Precision", "Recall", "F1_Score", "ROC_AUC"])
+    
+    for name, y_pred, y_prob in zip(method_names, predictions, probabilities):
+        acc = round(accuracy_score(y_test, y_pred), 4)
+        prec = round(precision_score(y_test, y_pred, zero_division=0), 4)
+        rec = round(recall_score(y_test, y_pred, zero_division=0), 4)
+        f1 = round(f1_score(y_test, y_pred, zero_division=0), 4)
+        roc = round(roc_auc_score(y_test, y_prob), 4)
+        
+        writer.writerow([name, acc, prec, rec, f1, roc])
+
+# 2. Trigger MATLAB via Command Line
+print("Launching MATLAB to generate graph (this may take a few seconds)...")
+try:
+    # This command tells MATLAB to run 'plot_results.m' in the background
+    subprocess.run(["matlab", "-batch", "plot_results"], check=True)
+    print("\n[SUCCESS] Graph generated! Check your folder for 'results_chart.png'.")
+except FileNotFoundError:
+    print("\n[ERROR] Python could not find MATLAB. Make sure MATLAB is installed and added to your system PATH.")
+except subprocess.CalledProcessError:
+    print("\n[ERROR] MATLAB encountered an issue while running the script.")

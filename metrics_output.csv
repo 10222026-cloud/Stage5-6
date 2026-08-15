@@ -1,0 +1,7 @@
+Method,Accuracy,Precision,Recall,F1_Score,ROC_AUC
+Baseline,0.8889,1.0,0.8333,0.9091,0.9444
+Class Weighting,0.8889,1.0,0.8333,0.9091,0.9444
+SMOTE,0.8889,1.0,0.8333,0.9091,0.9306
+Threshold Tuning,0.8889,0.8571,1.0,0.9231,0.9444
+Simulated Focal Loss,0.8333,0.8,1.0,0.8889,0.9722
+NearMiss,0.8889,1.0,0.8333,0.9091,0.9583
